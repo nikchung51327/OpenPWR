@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+.ipynb_checkpoints/
+.DS_Store
+
+# Validation figures: the four canonical ones are tracked; the solver and
+# parameter variants are reproducible, so they are not.
+validation/figures/*_printed.png
+validation/figures/*_surge.png
+validation/figures/*_radau.png
+validation/figures/*_eq34printed.png
+
+# Packaging and editors
+*.egg-info/
+build/
+dist/
+.vscode/
+.idea/
+
+# Local change history (kept out of the published repo)
+changes_log.md

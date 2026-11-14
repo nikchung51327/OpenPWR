@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pwr-plant"
+version = "0.2.0"
+description = "Non-linear PWR plant model with a two-point axial core and a control testbed"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+authors = [
+    { name = "Nikolas Chung" },
+    { name = "Christos Evripidou" },
+    { name = "Mehmet Mercangöz" },
+]
+# Keep these floors in step with requirements.txt, which explains each one.
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "pandas>=2.2",
+    "matplotlib>=3.9",
+]
+
+[tool.setuptools]
+packages = ["pwr_plant"]
