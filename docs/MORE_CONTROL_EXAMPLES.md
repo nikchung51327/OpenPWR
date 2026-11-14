@@ -24,7 +24,11 @@ from pwr_plant import *
 
 plant = Plant()
 x0, u0, res = trim(plant, 1.0)
+dem = step(1.0, 0.9, t_step=60.0)      # the demand every example uses
 ```
+
+Every loop below also carries `ValvePI()`, the steam-pressure controller built
+in `QUICKSTART.md` section 11. Paste that class in as well.
 
 ---
 ## Plotting setup
@@ -119,7 +123,7 @@ r = ClosedLoop(plant, [GridDemand(), MrodP(), ValvePI()],
 ```
 
 ```
-Pn_end 0.9002  (demand 0.90)      |DI|max 0.45368   DI_end +0.45368
+Pn_end 0.9001  (demand 0.90)      |DI|max 0.45368   DI_end +0.45368
 ```
 
 Power tracks to four figures with **no integrator state**. The rod drive already
@@ -153,23 +157,29 @@ class AOrodP(Controller):
     def __init__(self, kp=2000., v_max=72., target=0.0):
         self.kp, self.v_max, self.target = kp, v_max, target
     def update(self, t, sig, xc, u, ctx):
-        v = float(np.clip(self.kp*(sig["DI"] - self.target), -self.v_max, self.v_max))
+        v = float(np.clip(self.kp*(self.target - sig["DI"]), -self.v_max, self.v_max))
         u[IU["vrod_AO"]] += v
         return EMPTY
+
+r_ao   = ClosedLoop(plant, [GridDemand(), AOrodP(), ValvePI()],
+                    demand=dem, x0=x0, u0=u0).run(900, n_out=600)
+r_both = ClosedLoop(plant, [GridDemand(), MrodP(), AOrodP(), ValvePI()],
+                    demand=dem, x0=x0, u0=u0).run(900, n_out=600)
 ```
 
 ```
 AOrod only  -> DI       Pn_end 1.0000   |DI|max 0.00000   DI_end +0.00000
-naive both  -> Pn, DI   Pn_end 0.8999   |DI|max 0.02329   DI_end +0.00009
+naive both  -> Pn, DI   Pn_end 0.8999   |DI|max 0.03928   DI_end -0.00009
 ```
 
-**Sign again:** the error is `DI − target`, positive. From the table in example
-3, `vrod_AO` moves `DI` *negative*, so positive gain on positive error is
-negative feedback. I had this backwards on the first attempt and power ran to
-2.16 before the integrator gave up.
+**Sign again:** the error is `target − DI`. From the gain matrix above,
+`vrod_AO` moves `DI` *positive*, so a positive gain on `target − DI` is negative
+feedback. Write it as `DI − target` and the loop is positive feedback: power
+runs to 3.5 with no error raised.
 
-Run both groups together and you get power tracking *and* `DI` held — the naive
-pairing works. Example 9 asks whether it's the best one.
+With AOrod alone nothing follows the demand, so power stays at 1.0 and `DI`
+never moves. Run both groups together and you get power tracking *and* `DI`
+held — the naive pairing works. Example 3 asks whether it's the best one.
 
 ---
 
@@ -189,12 +199,12 @@ class RodPID2x2(Controller):
         return np.array([0., 0., ctx.sig0["Pn"], ctx.sig0["DI"]])
     def update(self, t, sig, xc, u, ctx):
         ep = ctx.demand(t) - sig["Pn"]
-        ed = sig["DI"] - 0.0                       # note the sign, as in ex 8
+        ed = 0.0 - sig["DI"]                       # note the sign, as in example 2
         dyp = (sig["Pn"] - xc[2]) / self.Tf
         dyd = (sig["DI"] - xc[3]) / self.Tf
         cp = float(np.clip(self.kp[0]*ep + self.ki[0]*xc[0] - self.kd[0]*dyp,
                            -self.v_max, self.v_max))
-        cd = float(np.clip(self.kp[1]*ed + self.ki[1]*xc[1] + self.kd[1]*dyd,
+        cd = float(np.clip(self.kp[1]*ed + self.ki[1]*xc[1] - self.kd[1]*dyd,
                            -self.v_max, self.v_max))
         if self.modal:
             vm, va = cp - cd, cp + cd
@@ -205,16 +215,20 @@ class RodPID2x2(Controller):
             u[IU["vrod_M"]]  += cp
             u[IU["vrod_AO"]] += cd
         return np.array([ep, ed, dyp, dyd])
+
+runs = {name: ClosedLoop(plant, [GridDemand(), RodPID2x2(modal=m), ValvePI()],
+                         demand=dem, x0=x0, u0=u0).run(900, n_out=600)
+        for name, m in (("groups", False), ("modal", True))}
 ```
 
 Pairing, with `ki = 0`:
 
 ```
-groups   IAE_Pn 1.4554   |DI|max 0.02329   Pn_end 0.8999   DI_end -0.00009   rodmax 72.0
-modal    IAE_Pn 1.2428   |DI|max 0.00517   Pn_end 0.8999   DI_end -0.00000   rodmax 72.0
+groups   IAE_Pn 1.4557   |DI|max 0.03928   Pn_end 0.8999   DI_end -0.00009   rodmax 72.0
+modal    IAE_Pn 1.2417   |DI|max 0.00515   Pn_end 0.8999   DI_end -0.00000   rodmax 72.0
 ```
 
-Modal is **4.5× tighter on axial offset** and 15% better on power tracking.
+Modal is **7.6× tighter on axial offset** and 15% better on power tracking.
 
 ![Direct versus modal pairing](figures/ex09_pairing.png)
 
@@ -229,10 +243,10 @@ Now the integral gain, on the modal pairing:
 
 ```
 ki_power    IAE_Pn    |DI|max   Pn_end
-     0.0     1.2428   0.00517   0.8999
-     1.0     1.4691   0.00518   0.8997
-     5.0     1.9389   0.00519   0.8995
-    20.0     2.0650   0.00520   0.9000
+     0.0     1.2417   0.00515   0.8999
+     1.0     1.4744   0.00515   0.8997
+     5.0     1.9471   0.00515   0.8995
+    20.0     2.0747   0.00517   0.9000
 ```
 
 **Monotonically worse, and it buys nothing** — there was no offset to remove.
@@ -320,14 +334,15 @@ Two features of the model make this a *simple* MPC rather than a project:
 **Always scale.** `linearize` returns the scaling vector `S`; the states span
 seven decades and the condensed matrices are hopeless without it.
 
-Horizon and sample period matter more than the weights:
+Horizon and sample period matter more than the weights. Same loop and demand
+as example 3, with `RodMPC(N, Ts, r)` in place of the PID, `run(900, n_out=600)`:
 
 ```
  N   Ts      r        IAE    |DI|max   Pn_end   runtime
-20  5.0   1e-06   37.2031    0.01479   0.8211     2.6 s
-20  5.0   1e-08   16.9512    0.00540   0.8682     2.0 s
-20  2.0   1e-08    3.2436    0.00600   0.8956     6.1 s
-60  2.0   1e-09    1.9250    0.00620   0.8982    20.7 s
+20  5.0   1e-06   61.2174    0.01490   0.8206     1.6 s
+20  5.0   1e-08   26.7007    0.00544   0.8679     1.3 s
+20  2.0   1e-08    4.6554    0.00596   0.8955     4.0 s
+60  2.0   1e-09    2.5338    0.00617   0.8981     7.3 s
 ```
 
 ---
@@ -335,7 +350,7 @@ Horizon and sample period matter more than the weights:
 ## 5. PID vs MPC
 
 Same plant, same valve loop, same demand. `PID` is the modal 2×2 from example 3;
-`MPC` is `N=30, Ts=2`.
+`MPC` is `N=30, Ts=2`. Each run is 900 s, scored with `score()` below.
 
 Both loops here also carry `PressurizerLevelPI()`, and it is **load-bearing, not
 decoration.** Surge is an input (`Config.pzr_surge=False`), so with `mdot_sur`
@@ -351,16 +366,16 @@ without it only because they are gentler.
 
 ```
             IAE      |DI|max   Pn_end   rodmax   travel   runtime
-PID      1.1914      0.00517   0.8999     72.0    147.4     1.6 s
-MPC      2.4023      0.00587   0.8982     72.0    149.7     8.5 s
+PID      1.2417      0.00515   0.8999     72.0    148.1     0.5 s
+MPC      2.5315      0.00617   0.8981     72.0    149.8     3.6 s
 ```
 
 **Large step, 1.0 → 0.7:**
 
 ```
             IAE      |DI|max   Pn_end   rodmax   travel   runtime
-PID     11.6027      0.00582   0.6998     72.0    151.4     1.4 s
-MPC     85.5898      0.03511   0.5996     72.0    147.1     9.9 s
+PID     11.7814      0.00579   0.6998     72.0    152.3     0.6 s
+MPC     86.5989      0.03555   0.5984     72.0    169.1     4.3 s
 ```
 
 PID wins both, and on the large step it is not close. Two separate reasons, both
@@ -372,7 +387,7 @@ Small multiples: rows are the two step sizes, columns the two controlled
 outputs. Same colour for the same controller across all four panels, so the eye
 can carry identity between them.
 
-**MPC has no integral action.** It settles at 0.8982 instead of 0.9000 on the
+**MPC has no integral action.** It settles at 0.8981 instead of 0.9000 on the
 small step — a pure state-feedback law with a move penalty has a steady-state
 offset. The standard fix is an offset-free formulation: augment the model with a
 disturbance state, estimate it, and correct the target. That is the first thing
@@ -431,7 +446,7 @@ Four rules that keep a comparison honest:
   for. A controller that wins on IAE by saturating the rods hasn't won.
 - **Report both outputs.** A power controller that looks excellent while `DI`
   runs to 0.45 and climbing (example 1) is not excellent.
-- **Report runtime.** 1.4 s against 9.9 s is a real difference if you intend to
+- **Report runtime.** 0.6 s against 4.3 s is a real difference if you intend to
   run a thousand scenarios.
 
 ---
@@ -607,7 +622,7 @@ this file assumes it.** Pass a map that swaps the halves and `AOrodP` and
 `RodPID2x2` both drive `DI` away from target, with no error raised.
 
 A wrong sign here raises no error. It shows up either as power running away
-(to 2.1 in one case), or as `DI` drifting while `Pn` looks fine, so check `DI`
+(to 3.5 with the sign in `AOrodP` reversed), or as `DI` drifting while `Pn` looks fine, so check `DI`
 as well as `Pn` after any change to these two controllers.
 
 If a run takes more than about 30 s (or 60 s with a sampled controller), kill it
