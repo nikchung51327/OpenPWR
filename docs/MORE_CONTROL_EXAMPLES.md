@@ -232,8 +232,8 @@ Modal is **7.6× tighter on axial offset** and 15% better on power tracking.
 
 ![Direct versus modal pairing](figures/ex09_pairing.png)
 
-Both pairings track power identically — the difference is entirely in the right
-panel. Set the x-limits to the transient (`ax.set_xlim(40, 400)`); the remaining
+Both pairings track power closely — the difference is almost entirely in the
+right panel. Set the x-limits to the transient (`ax.set_xlim(40, 400)`); the remaining
 500 s is flat and only shrinks what you care about. The reason
 is in the gain matrix above: AOrod moves `DI` (+0.085) *more* than it moves power (+0.026), so
 the direct pairing has its two loops fighting through the cross-term. The modal

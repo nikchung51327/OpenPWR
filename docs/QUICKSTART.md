@@ -307,7 +307,7 @@ plt.show()
 Read those four panels left to right — they are a causal chain:
 
 1. **The valve opens** 5 % at t = 20 s.
-2. **Steam pressure falls**, 7.280 → 7.135 MPa. More steam is leaving than the
+2. **Steam pressure falls**, 7.280 → 7.136 MPa. More steam is leaving than the
    core is making.
 3. **The cold leg cools**, 296.96 → 295.85 °C. A lower secondary pressure means
    a lower boiling temperature, so the steam generator pulls harder on the
@@ -440,7 +440,7 @@ plt.show()
 ![Closed loop vs open loop](qs/06_loop_vs_open.png)
 
 Without control, power settles 2.9 % high and stays there. With control it peaks
-at 1.009 and returns to **1.00002** — offset-free, from a purely proportional
+at 1.009 and returns to **1.00003** — offset-free, from a purely proportional
 law, because the rod drive integrates.
 
 Note `ax = ...` then passing `ax=ax` — that is how you overlay two runs.
@@ -1089,12 +1089,13 @@ Without the band the core goes fully lopsided, and look at the sign at 24 h: it
 has **crossed over**. The bottom panel is why, and it is worth tracing through,
 because it is the mechanism §1 described in words.
 
-**Follow the two grey curves.** Power tilts toward the bottom half early on, so
-xenon accumulates there — bottom xenon climbs to **1.76** while the top falls to
-**0.78**. Xenon absorbs neutrons, so the bottom half is now being poisoned
-exactly where the power is, and it starts to lose out to the clean top half.
-Around **hour 22 the two curves cross**, and `DI` flips from +0.94 to −0.98 in
-about two hours. That is one half-cycle of the axial xenon oscillation, and in
+**Follow the two grey curves.** Power tilts toward the top half early on (`DI`
+goes positive). The bottom half, now running at low power, burns off less
+xenon, so bottom xenon climbs to **1.76** while the top falls to **0.78**. Xenon
+absorbs neutrons, so the bottom is poisoned further and still more power moves
+to the top. But the top is also breeding iodine at the higher rate, and hours
+later that iodine decays into xenon there. Around **hour 22 the two curves
+cross**, and `DI` flips from +0.85 at hour 20 to −0.98 at hour 24. That is one half-cycle of the axial xenon oscillation, and in
 this model the mode is **unstable**, so it does not decay — the next swing is
 bigger.
 
