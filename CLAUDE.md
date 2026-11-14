@@ -296,9 +296,9 @@ docs here:
 - **Docs and code comments state the current state only.** What something
   used to be, when it changed, bugs fixed and claims withdrawn all go in
   `changes_log.md` (git-ignored), not in the docs.
-- **Figure links in `QUICKSTART.md` and `MORE_CONTROL_EXAMPLES.md` point at
-  images that are not in the repo.** The owner is fixing them manually. Leave
-  them alone.
+- **Doc figures live in `docs/qs/` and `docs/figures/`** and are what the code
+  above each image link produces. If you change an example's code, regenerate
+  its figure.
 - `tests/smoke_test.py` is the fast check — 13 assertions, ~15 s. Run it after
   any change to the model or the layout. It specifically catches stale
   `pwr_two_point_plant` imports, the 53-state/8-input shape, rod sign
