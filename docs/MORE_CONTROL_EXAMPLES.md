@@ -282,9 +282,9 @@ from scipy.signal import cont2discrete
 class RodMPC(Controller):
     name = "rod_mpc"
     def __init__(self, N=30, Ts=2.0, q=(1.0, 3.0), r=1e-9, v_max=72.0,
-                 outputs=("Pn", "DI")):
+                 outputs=("Pn", "DI"), offset_free=True):
         self.N, self.Ts, self.q, self.r = N, Ts, np.array(q, float), r
-        self.v_max, self.outputs = v_max, outputs
+        self.v_max, self.outputs, self.offset_free = v_max, outputs, offset_free
 
     def initialize(self, ctx):
         A, B, C, D, S = linearize(ctx.plant, ctx.x0, ctx.u0)
@@ -294,30 +294,42 @@ class RodMPC(Controller):
         self.Ad, self.Bd, self.Cd, self.S = Ad, Bd, Cd, S
         self.nu, self.ny, self.nx = Bd.shape[1], Cd.shape[0], Ad.shape[0]
         N = self.N
-        Psi   = np.zeros((N*self.ny, self.nx))
-        Theta = np.zeros((N*self.ny, N*self.nu))
-        Ak = np.eye(self.nx)
+        Psi   = np.zeros((N*self.ny, self.nx))        # effect of the current state
+        Theta = np.zeros((N*self.ny, N*self.nu))      # effect of the planned moves
+        Phi   = np.zeros((N*self.ny, self.nx))        # effect of a constant disturbance
+        Ak, Sk = np.eye(self.nx), np.zeros((self.nx, self.nx))
         for k in range(N):
-            Ak = Ak @ Ad if k else Ad
+            Sk = Sk + Ak                               # I + Ad + ... + Ad^k
+            Ak = Ak @ Ad                               # Ad^(k+1)
             Psi[k*self.ny:(k+1)*self.ny, :] = Cd @ Ak
+            Phi[k*self.ny:(k+1)*self.ny, :] = Cd @ Sk
             for j in range(k+1):
                 Theta[k*self.ny:(k+1)*self.ny, j*self.nu:(j+1)*self.nu] = \
                     Cd @ np.linalg.matrix_power(Ad, k-j) @ Bd
-        self.Psi, self.Theta = Psi, Theta
+        self.Psi, self.Theta, self.Phi = Psi, Theta, Phi
         self.Wy = np.diag(np.tile(np.sqrt(self.q), N))
         self.Amat = np.vstack([self.Wy @ Theta, np.sqrt(self.r)*np.eye(N*self.nu)])
         self.lo = np.full(N*self.nu, -self.v_max)
         self.hi = np.full(N*self.nu, +self.v_max)
+        self.z_prev = self.v_prev = None               # last sample's state and move
         return EMPTY
 
     def update(self, t, sig, xc, u, ctx):
         z = (ctx.x - ctx.x0) / self.S                   # scaled deviation state
+        # Disturbance estimate: whatever the model failed to predict over the
+        # last sample.  It is the footprint of every input the model does not
+        # contain (the valve, the grid demand) and of linearisation error.
+        e = np.zeros(self.nx)
+        if self.offset_free and self.z_prev is not None:
+            e = z - (self.Ad @ self.z_prev + self.Bd @ self.v_prev)
         tgt = np.array([ctx.demand(t) - ctx.sig0["Pn"], 0.0 - ctx.sig0["DI"]])
         ref = np.tile(tgt, self.N)
-        b = np.concatenate([self.Wy @ (ref - self.Psi @ z), np.zeros(self.N*self.nu)])
+        free = self.Psi @ z + self.Phi @ e              # what happens with no moves
+        b = np.concatenate([self.Wy @ (ref - free), np.zeros(self.N*self.nu)])
         sol = lsq_linear(self.Amat, b, bounds=(self.lo, self.hi),
                          lsmr_tol="auto", max_iter=40)
         v = sol.x[:self.nu]                             # receding horizon
+        self.z_prev, self.v_prev = z, v.copy()
         u[IU["vrod_M"]]  += float(v[0])
         u[IU["vrod_AO"]] += float(v[1])
         return EMPTY
@@ -334,16 +346,45 @@ Two features of the model make this a *simple* MPC rather than a project:
 **Always scale.** `linearize` returns the scaling vector `S`; the states span
 seven decades and the condensed matrices are hopeless without it.
 
-Horizon and sample period matter more than the weights. Same loop and demand
-as example 3, with `RodMPC(N, Ts, r)` in place of the PID, `run(900, n_out=600)`:
+### The disturbance estimate
+
+The prediction model contains only the two rods. In the loop, a separate
+controller is moving the steam valve the whole time, and the model has never
+heard of it. Without a correction the MPC plans against a plant whose valve it
+believes is at trim, and settles where its *predicted* error is zero rather than
+where the real one is: 0.8981 instead of 0.9000 on a 10 % step. Hold the valve
+fixed and that offset disappears completely, which is how we know the valve is
+the cause and not the move penalty or the linearisation.
+
+`e` is the fix. At each sample it is the difference between the state the plant
+actually reached and the state the model predicted one sample ago. That gap is
+the footprint of everything the model leaves out, whichever input caused it.
+The controller assumes it persists over the horizon (`Phi @ e`) and plans
+around it. Once the plant settles, the prediction is exact and the offset is
+gone. `offset_free=False` switches it off, to see the difference.
+
+`z_prev` and `v_prev` are ordinary attributes. That is legal only because the
+controller is sampled, so `update` runs exactly once per sample.
+
+### Tuning
+
+Same demand as example 3, with `RodMPC(N, Ts, r)` in place of the PID plus
+`PressurizerLevelPI()` (example 5 explains why that is mandatory),
+`run(900, n_out=600)`:
 
 ```
  N   Ts      r        IAE    |DI|max   Pn_end   runtime
-20  5.0   1e-06   61.2174    0.01490   0.8206     1.6 s
-20  5.0   1e-08   26.7007    0.00544   0.8679     1.3 s
-20  2.0   1e-08    4.6554    0.00596   0.8955     4.0 s
-60  2.0   1e-09    2.5338    0.00617   0.8981     7.3 s
+20  5.0   1e-06    1.8895    0.00154   0.8999     1.2 s
+20  5.0   1e-08    1.1151    0.00544   0.9000     1.2 s
+20  2.0   1e-08    1.0513    0.00619   0.9000     4.6 s
+60  2.0   1e-09    1.0458    0.00641   0.9000     4.3 s
 ```
+
+All four reach the target. The move penalty `r` is the trade that is left: the
+heavily penalised first row moves the rods least (peak 69 spm, never on the
+stop) and holds `DI` four times tighter, at the cost of slower power tracking.
+A longer horizon buys almost nothing here: 20 steps and 60 steps differ in the
+fourth decimal.
 
 ---
 
@@ -365,21 +406,27 @@ without it only because they are gentler.
 **Small step, 1.0 → 0.9:**
 
 ```
-            IAE      |DI|max   Pn_end   rodmax   travel   runtime
-PID      1.2417      0.00515   0.8999     72.0    148.1     0.5 s
-MPC      2.5315      0.00617   0.8981     72.0    149.8     3.6 s
+                      IAE      |DI|max   Pn_end   rodmax   travel   runtime
+PID                1.2417      0.00515   0.8999     72.0    148.1     0.5 s
+MPC                1.0459      0.00641   0.9000     72.0    151.5     2.8 s
+MPC, no estimate   2.5315      0.00617   0.8981     72.0    149.8     3.3 s
 ```
 
 **Large step, 1.0 → 0.7:**
 
 ```
-            IAE      |DI|max   Pn_end   rodmax   travel   runtime
-PID     11.7814      0.00579   0.6998     72.0    152.3     0.6 s
-MPC     86.5989      0.03555   0.5984     72.0    169.1     4.3 s
+                      IAE      |DI|max   Pn_end   rodmax   travel   runtime
+PID               11.7814      0.00579   0.6998     72.0    152.3     0.6 s
+MPC               11.4429      0.01276   0.7000     72.0    155.9     3.2 s
+MPC, no estimate  86.5989      0.03555   0.5984     72.0    169.1     4.2 s
 ```
 
-PID wins both, and on the large step it is not close. Two separate reasons, both
-worth reporting rather than hiding:
+"MPC, no estimate" is `RodMPC(offset_free=False)`.
+
+With the disturbance estimate the two are close, and they win on different
+outputs: MPC tracks power slightly better on both steps, PID holds `DI` tighter
+on both (by a factor of two on the large step) and runs about five times
+faster. Without the estimate MPC loses badly, for two separate reasons:
 
 ![PID versus MPC](figures/ex11_pid_vs_mpc.png)
 
@@ -387,20 +434,23 @@ Small multiples: rows are the two step sizes, columns the two controlled
 outputs. Same colour for the same controller across all four panels, so the eye
 can carry identity between them.
 
-**MPC has no integral action.** It settles at 0.8981 instead of 0.9000 on the
-small step — a pure state-feedback law with a move penalty has a steady-state
-offset. The standard fix is an offset-free formulation: augment the model with a
-disturbance state, estimate it, and correct the target. That is the first thing
-to add.
+**The model does not contain the valve.** On the small step the uncorrected MPC
+settles at 0.8981 instead of 0.9000. The valve controller has closed the valve
+to about 0.90 of trim and the prediction still assumes it is at trim (example
+4). With the valve held fixed the same controller lands on 0.9000.
 
 **The prediction model is linearized at 100% power.** CP8 measures the linear
 validity envelope at about a 12% step for 5% error. A 30% step is far outside it,
-so the MPC confidently drives to where its model says 0.70 is and lands at 0.60.
-PID uses no model and doesn't care. The fix is re-linearizing per operating point
-— the CP9 setpoint family is exactly that input — or an LPV/gain-scheduled MPC.
+so the uncorrected MPC confidently drives to where its model says 0.70 is and
+lands at 0.60. PID uses no model and doesn't care.
 
-**This is not an argument that MPC is worse.** It is an argument that MPC's
-advantages aren't exercised by this problem. The 2×2 rod problem is perfectly
+The disturbance estimate removes both, because it does not care where a
+prediction error comes from. It lands on 0.7000 with a model that is still
+linearised at 100 %. Re-linearizing per operating point (the CP9 setpoint
+family is exactly that input) would improve the transient further.
+
+**Neither controller is clearly better here.** MPC's advantages aren't
+exercised by this problem. The 2×2 rod problem is perfectly
 decoupled in modal coordinates (off-diagonal/diagonal = 0.0000 in the modal `C·A·B`),
 has no active output constraints, and has one dominant timescale. Those are the
 conditions under which a well-tuned PID is hard to beat.
@@ -446,7 +496,7 @@ Four rules that keep a comparison honest:
   for. A controller that wins on IAE by saturating the rods hasn't won.
 - **Report both outputs.** A power controller that looks excellent while `DI`
   runs to 0.45 and climbing (example 1) is not excellent.
-- **Report runtime.** 0.6 s against 4.3 s is a real difference if you intend to
+- **Report runtime.** 0.6 s against 3.2 s is a real difference if you intend to
   run a thousand scenarios.
 
 ---

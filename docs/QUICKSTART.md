@@ -1340,7 +1340,8 @@ edge.
 > moves the plant — not only the one you are commanding.** A real design fixes
 > this with a disturbance model and an offset-free formulation. `SimpleMPC` has
 > neither, deliberately, because leaving them out is what makes the failure
-> visible.
+> visible. `RodMPC` in `MORE_CONTROL_EXAMPLES.md` example 4 adds one, in about
+> five lines, and measures what it buys.
 
 ### The one knob
 
