@@ -292,7 +292,7 @@ each case a different matrix:
 **Case 1 is not Case 2 with AOrod frozen.** This is the easy mistake, and it is
 wrong in sign. Freezing AOrod in Case 2 leaves Mrod on the **bottom** half
 (`dDI = −0.082` for a 20-step move); Case 1 has it on the **top**
-(`dDI = +0.072`). Opposite halves, opposite sign. The two cases differ in where
+(`dDI = +0.071`). Opposite halves, opposite sign. The two cases differ in where
 Mrod *starts*, which is a different matrix — not a different command. To run
 Case 1, pass its `rod_map`; do not simply stop commanding `vrod_AO`.
 
@@ -424,7 +424,8 @@ Plant plus a list of controllers, integrated together as one augmented system.
 ### `ClosedLoop.run`
 
 ```python
-run(t_end, n_out=1500, method=None, rtol=1e-7, atol=1e-9, x0=None) -> Result
+run(t_end, n_out=1500, method=None, rtol=1e-7, atol=1e-9, x0=None,
+    max_step=None) -> Result
 ```
 
 Integrate from 0 to `t_end` seconds.
@@ -848,8 +849,8 @@ Eq 62. Reads `w_tur`, drives `utg` — the loop a real governor runs.
 `dutg/dw = 1/(0.05 × 60) = 0.333` per Hz. Vajpayee prints `KP = 643`, ~1900×
 that, which implies 0.16 % droop; at that gain a 0.13 Hz error commands 80 units
 of valve travel against a range of 0–1.5, the valve slams shut and the set
-undershoots to 57.7 Hz. The shipped gains hold a 10 % load rejection to a 0.66 Hz
-peak and return to 60.003 Hz with no saturation.
+undershoots. The shipped gains hold a 10 % step load rejection to a
+0.85 Hz peak and return to 60.00 Hz with no saturation.
 
 **This loop is inert unless `eq38_power_base` is correct.** It is by default —
 see below.
@@ -886,8 +887,9 @@ H = 23.7 s is still ~4× high for a real turbine-generator. To pick an H:
 Params(I_tg=1.99642e5 * H_target / 23.7)
 ```
 
-With the default gains and `H = 23.7 s`, an ungoverned 10 % load rejection runs
-the set to 108.6 Hz; with `TurbineSpeedPI` it peaks at 60.13 Hz.
+With `H = 23.7 s`, an ungoverned 10 % step load rejection never settles: the
+set passes 111 Hz after ten minutes and is still accelerating. With
+`TurbineSpeedPI` at its default gains it peaks at 60.85 Hz.
 
 ## `LQG`
 
@@ -979,8 +981,8 @@ have identical structure — both print `(O_rv·tau_hp + tau_ip)/(...)`. The mis
 
 | form | ζ | behaviour |
 |---|---|---|
-| as printed (`False`) | 0.3162 | underdamped, 21 s ringing |
-| with `tau_hp` (`True`, **default**) | 1.7322 | overdamped, smooth |
+| as printed (`False`) | 0.3500 | underdamped, 13 s ringing |
+| with `tau_hp` (`True`, **default**) | 2.6000 | overdamped, smooth |
 
 With `tau_hp` the quadratic factors **exactly** into
 `(s + 1/tau_hp)(s + 1/tau_ip)` — the residual is 0.00e+00, not merely small. The
@@ -992,8 +994,8 @@ Three further arguments put the default on the corrected form: eq 34 as printed 
 structurally inconsistent with eqs 35–36, which describe the same kind of stage
 and both carry the `tau_hp`; his Fig. 11f shows no ringing; and a reversal count
 across all 13 validated panels isolates the ringing to `P_tur` alone — case B
-shows 6 direction reversals where every thermal and pressure panel settles
-monotonically. The flag takes that 6 to 0 and leaves the others untouched.
+shows 4 direction reversals where every thermal and pressure panel settles
+monotonically. The flag takes that 4 to 0 and leaves the others untouched.
 
 Not a solver artefact: `rtol` 1e-7 → 1e-11, `atol` 1e-9 → 1e-14, and
 LSODA / BDF / Radau all agree to 3.3e-8.
@@ -1087,21 +1089,22 @@ linearize(plant, x0, u0, scaled=True) -> (A, B, C, D, S)
 
 Numerical Jacobians by central finite differences with relative perturbations.
 
-**Returns** — `A` (n×n), `B` (n×7), `C` (8×n), `D` (8×7), and `S` (n,), the
+**Returns** — `A` (n×n), `B` (n×8), `C` (8×n), `D` (8×8), and `S` (n,), the
 diagonal scaling applied: `A_scaled = S⁻¹ A S`, `B_scaled = S⁻¹ B`,
 `C_scaled = C S`.
 
 Outputs are [`OUTPUT_NAMES`](#name-tables); inputs are [`U_NAMES`](#name-tables).
 
 **Always keep `scaled=True`.** The states span seven decades; eigenvalues of
-the unscaled matrix are unreliable. Even scaled, `cond(A) ≈ 1.2e26`.
+the unscaled matrix are unreliable. Even scaled, `cond(A) ≈ 4e25`.
 
 **Notes**
 
 The model has 5 eigenvalues at the origin (rod reactivity, turbine speed,
 pressuriser level) and an unstable complex pair near +5.7e−5 (the axial xenon
-mode). `w_tur` is an *uncontrollable* integrator — remove that state before any
-Riccati solve, or LQR returns a marginally stable loop.
+mode). `w_tur` is a pure integrator of the turbine/load mismatch, reachable
+only through the valve — remove that state before a Riccati solve on a rod
+problem, which is what `LQG` does by default (`drop=('w_tur',)`).
 
 Linear validity: peak relative error in `Pn` against the non-linear plant is
 0.4 % at a 1 % valve step, 4.2 % at 10 %, 8.4 % at 20 %. The 5 % crossing is

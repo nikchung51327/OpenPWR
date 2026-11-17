@@ -114,10 +114,10 @@ import numpy as np
 #:     (O_rv * tau_hp + tau_ip) / (tau_hp * tau_ip)
 #:
 #: The missing `tau_hp` is decisive, not cosmetic.  With `O_rv = 1`,
-#: `tau_hp = 10`, `tau_ip = 1.01`:
+#: `tau_hp = 10`, `tau_ip = 0.4`:
 #:
-#:     as printed      zeta = 0.3162   UNDERDAMPED, 21 s ringing
-#:     with tau_hp     zeta = 1.7322   overdamped, smooth
+#:     as printed      zeta = 0.3500   UNDERDAMPED, 13 s ringing
+#:     with tau_hp     zeta = 2.6000   overdamped, smooth
 #:
 #: [V]'s own Fig. 11f shows case B rising smoothly to a single peak of ~1.0315
 #: with no ringing, which only the second form produces.  This is the same class
@@ -129,9 +129,9 @@ import numpy as np
 #:      describe the same kind of turbine stage and both carry the `tau_hp`;
 #:   2. [V]'s own Fig. 11f shows no ringing, which the printed form cannot give;
 #:   3. a reversal count across all 13 validated panels isolates the ringing to
-#:      `P_tur` alone -- case B shows 6 direction reversals after the
+#:      `P_tur` alone -- case B shows 4 direction reversals after the
 #:      perturbation, where every thermal and pressure panel settles
-#:      monotonically.  Setting this flag takes that 6 to 0 and leaves all the
+#:      monotonically.  Setting this flag takes that 4 to 0 and leaves all the
 #:      other panels untouched.
 #:
 #: It is NOT a solver artefact: rtol 1e-7 -> 1e-11, atol 1e-9 -> 1e-14, and
@@ -311,8 +311,8 @@ class Params:
 
     # ---- turbine, [V] eqs 34-38 ------------------------------------------
     tau_hp: float = 10.0
-    tau_ip: float = 1.01
-    tau_lp: float = 0.4
+    tau_ip: float = 0.4
+    tau_lp: float = 1.0
     F_hp: float = 0.33
     F_ip: float = 0.0                         # zero in Table 1: IP branch inert
     F_lp: float = 0.67
@@ -360,10 +360,10 @@ class Params:
     kappa_lo: float = 1.1067e10
     tau_1: float = 5.0e-8                     # neglected by default (see cfg)
     tau_2: float = 2.0e-3
-    tau_3: float = 1.01
-    tau_4: float = 47.065
-    K_lr: float = 8.2
-    tau_rtd: float = 1.0
+    tau_3: float = 1.0
+    tau_4: float = 1.01
+    K_lr: float = 47.065               # Table 1 labels this in seconds
+    tau_rtd: float = 8.2
     K_rtd: float = 10.667
 
     # ---- condenser, [V] eqs 39-42 ----------------------------------------
@@ -499,8 +499,8 @@ class Config:
     # DEFAULT IS [L]'s CASE 2 ([L] eq 12): Mrod in point 1, AOrod in point 2.
     #
     #   Mrod  -> half 1 (bottom)   dPn = +2.2e-3,  dDI = -2.2e-2
-    #   AOrod -> half 2 (top)      dPn = +5.1e-3,  dDI = +1.9e-2
-    #   (for a 10 spm / 30 s pulse)
+    #   AOrod -> half 2 (top)      dPn = +5.0e-3,  dDI = +1.9e-2
+    #   (for a 10 spm / 30 s pulse, read ten minutes later)
     #
     # [[0,1],[1,0]] is the same plant with the two rod labels exchanged
     # (identical A; B columns swapped).  The differential signs in
@@ -1464,7 +1464,7 @@ EMPTY = np.zeros(0)
 class LoopContext:
     """Everything a controller may need besides the live signals.
 
-    CHANGE 1 (v2): `x` is the live state vector, refreshed by ClosedLoop
+    `x` is the live state vector, refreshed by ClosedLoop
     before every controller call, so a controller can do full-state feedback:
 
         ctx.x                      the whole 53-element vector
@@ -1510,7 +1510,7 @@ class Controller:
         is not monotonic, and you must NOT keep memory in Python attributes.
         Return the DERIVATIVE of xc.
 
-    SAMPLED (Ts = a number, in seconds)                        [CHANGE 2, v2]
+    SAMPLED (Ts = a number, in seconds)
         update() is called exactly once per sample instant, in order, with t
         increasing.  Outputs are held constant until the next sample.  Return
         the NEXT VALUE of xc, not its derivative.  Because the call pattern is
@@ -1807,10 +1807,9 @@ Pass **VAJPAYEE_TABLE2["core_neutronics"] to use the paper's numbers verbatim.
 The TURBINE SPEED gains do not transfer either, for an unrelated reason.  Eq 62
 with KP = 643 implies a governor droop of 1/643 = 0.16 %, where real machines
 run 4-5 %.  At that gain a 0.13 Hz speed error commands 80 units of valve travel
-against a range of 0-1.5, so the valve slams shut and the set undershoots to
-57.7 Hz.  The shipped defaults are droop-based: KP = 0.333 per Hz, which holds
-a 10 % load rejection to a 0.66 Hz peak and returns to 60.003 Hz with the valve
-landing at 0.84 -- no saturation.
+against a range of 0-1.5, so the valve slams shut and the set undershoots.  The shipped defaults are droop-based: KP = 0.333 per Hz, which holds
+a 10 % step load rejection to a 0.85 Hz peak and returns to 60.00 Hz with no
+saturation.
 """
 
 VAJPAYEE_SIGN_NOTES = {
@@ -2033,7 +2032,7 @@ class LQG(Controller):
 
 
 # ---------------------------------------------------------------------------
-# Sampled controllers                                            [CHANGE 2]
+# Sampled controllers
 # ---------------------------------------------------------------------------
 
 class DiscretePI(Controller):
@@ -2314,7 +2313,7 @@ class ClosedLoop:
             [np.atleast_1d(c.initialize(self.ctx)).astype(float)
              for c in self.controllers] + [EMPTY])
 
-        # CHANGE 2: split the controller list by sample period
+        # split the controller list by sample period
         self.discrete = [i for i, c in enumerate(self.controllers)
                          if getattr(c, "Ts", None)]
         self.continuous = [i for i, c in enumerate(self.controllers)
@@ -2350,7 +2349,7 @@ class ClosedLoop:
         held output and a zero state derivative; continuous ones are evaluated
         now."""
         u = self._base_u()
-        self.ctx.x = x                      # CHANGE 1: live state for controllers
+        self.ctx.x = x                      # live state for controllers
         sig = self.plant.signals(x)
         nc = self.n - self.plant.n
         dxc = np.zeros(nc)
@@ -2446,7 +2445,7 @@ class ClosedLoop:
         dem = np.array([self.demand(tt) for tt in sol.t])
         return Result(self, sol.t, sol.y, U, dem)
 
-    # -- sampled: chop at every sample instant                 [CHANGE 2] ---
+    # -- sampled: chop at every sample instant ------------------------------
     def sample_grid(self, t_end: float) -> np.ndarray:
         """Union of every sampled controller's instants, plus 0 and t_end."""
         marks = {0.0, float(t_end)}

@@ -471,7 +471,7 @@ plt.show()
 ![Demand step](qs/07_demand_step.png)
 
 Power tracks to 0.89996, and turbine speed returns to 60.0002 Hz after a peak
-excursion of 0.83 Hz. Three controllers are cooperating:
+excursion of 0.85 Hz. Three controllers are cooperating:
 
 | controller | measures | moves |
 |---|---|---|
@@ -696,14 +696,14 @@ import numpy as np
 err = np.abs(res.df["Pn"] - res.df["demand"])
 print(f"worst tracking error {err.max():.5f}")       # 0.00058
 print(f"power at the end     {res.df['Pn'].iloc[-1]:.5f}")   # 1.00001
-print(f"worst speed error    {np.abs(res.df['w_tur'] - 60).max():.4f}")  # 0.0673
+print(f"worst speed error    {np.abs(res.df['w_tur'] - 60).max():.4f}")  # 0.0675
 ```
 
 **Read the three panels in order, because each one tells you something the one
 above it hides.**
 
 **Top — it works.** Power tracks the demand ramp to within 0.06 %, and the
-turbine follows. Rod speed peaks at 1.7 spm out of the 72 available, so the
+turbine follows. Rod speed peaks at 1.75 spm out of the 72 available, so the
 manoeuvre is nowhere near an actuator limit. If this were the only plot you
 looked at, you would call the job done.
 
@@ -793,8 +793,8 @@ Same 80-minute manoeuvre as §13, the only change being the reactor-side loop:
 
 | | worst `Pn` error | `Tavg` at end | peak speed error |
 |---|---|---|---|
-| `HoldPower` (power commanded) | **0.00058** | 315.57 °C | 0.0673 Hz |
-| `RodsOnTavg` (temperature programmed) | 0.00479 | 315.52 °C | 0.0507 Hz |
+| `HoldPower` (power commanded) | **0.00058** | 315.57 °C | 0.0675 Hz |
+| `RodsOnTavg` (temperature programmed) | 0.00481 | 315.52 °C | 0.0507 Hz |
 
 Power tracking gets **8× worse**, and that is not a defect — it is the
 architecture being honest. `RodsOnTavg` never promised to track power. It
@@ -917,8 +917,8 @@ panel and ignores the others**:
 | | `Pn` | `Tavg` | `DI` |
 |---|---|---|---|
 | **§13** power held | tracks to 0.00058 | **peaks 5.0 °C above program** | drifts to +0.0279 |
-| **§14** + Tavg on program | 0.00479, an outcome | **within 1.0 °C throughout** | drifts to +0.0280 |
-| **§15** + axial band | 0.00498 | inside the dead band | **held, ends −0.0071** |
+| **§14** + Tavg on program | 0.00481, an outcome | **within 1.0 °C throughout** | drifts to +0.0280 |
+| **§15** + axial band | 0.00500 | inside the dead band | **held, ends −0.0071** |
 
 The shaded strip in the middle panel is the **±0.55 °C dead band** around the
 program. Inside it `RodsOnTavg` commands zero rod speed — which is why the trace
@@ -1011,8 +1011,8 @@ Over 80 minutes, adding it changes almost nothing except the thing it controls:
 
 | | `DI` peak | `DI` at end | worst `Pn` error | peak speed error |
 |---|---|---|---|---|
-| no band | 0.0543 | **+0.0280** | 0.00479 | 0.0507 Hz |
-| `AxialOffsetBand(0.03)` | **0.0303** | **−0.0071** | 0.00498 | 0.0507 Hz |
+| no band | 0.0543 | **+0.0280** | 0.00481 | 0.0507 Hz |
+| `AxialOffsetBand(0.03)` | **0.0303** | **−0.0071** | 0.00500 | 0.0507 Hz |
 
 Speed error is *identical*. Power tracking degrades in the fifth decimal. The
 offset peak is halved and, more importantly, the core comes home instead of
@@ -1173,7 +1173,7 @@ behaviour or frequency.
 
 > Try it: `TurbineSpeedPI(**VAJPAYEE_TABLE2["turbine_speed"])` uses the paper's
 > published gains instead of the droop-based defaults. The valve slams shut and
-> the set undershoots to 57.7 Hz — his `KP = 643` implies 0.16 % droop where real
+> the set undershoots to 58.9 Hz — his `KP = 643` implies 0.16 % droop where real
 > machines run 4–5 %.
 
 ---
@@ -1374,10 +1374,10 @@ plt.show()
 
 | `r` | IAE power | peak rod speed |
 |---|---|---|
-| 1e-6 | 6.0777 | **72.0 spm** (on the stop) |
-| 1e-5 | 5.4578 | 22.8 spm |
-| 1e-4 | 2.9538 | 3.0 spm |
-| 1e-3 | **2.2541** | 0.3 spm |
+| 1e-6 | 6.0925 | **72.0 spm** (on the stop) |
+| 1e-5 | 5.4709 | 22.8 spm |
+| 1e-4 | 3.0207 | 3.0 spm |
+| 1e-3 | **2.3395** | 0.3 spm |
 
 Lower `r` buys aggression and here it buys nothing: at 1e-6 the controller slams
 into the ±72 spm limit and tracking gets *worse*, because a saturated actuator is
@@ -1396,18 +1396,16 @@ res = ClosedLoop(plant, [GridDemand(), TurbineSpeedPI(), SimpleMPC()],
 
 | controller | IAE power | peak error | end |
 |---|---|---|---|
-| **`HoldPower`** from §8 | **0.2444** | **0.00058** | 1.00001 |
-| `SimpleMPC`, N=20 | 10.6000 | 0.00939 | 1.00004 |
-| `SimpleMPC`, N=20, preview | 10.5376 | 0.00809 | 1.00003 |
-| `SimpleMPC`, N=60, preview | 10.5026 | 0.00811 | 1.00000 |
+| **`HoldPower`** from §8 | **0.2513** | **0.00058** | 1.00001 |
+| `SimpleMPC`, N=20 | 10.6301 | 0.00941 | 1.00004 |
+| `SimpleMPC`, N=20, preview | 10.5684 | 0.00812 | 1.00003 |
+| `SimpleMPC`, N=60, preview | 10.5334 | 0.00813 | 1.00000 |
 
-**The six-line controller from §8 beats it by 43×**, and that is not a tuning
+**The six-line controller from §8 beats it by 42×**, and that is not a tuning
 failure. It is §2 coming back: the rod drive integrates, so a proportional law on
 rod *speed* is already a high-gain **integral** controller on power — offset-free
 by construction, with no model and nothing to tune. MPC has no structural edge to
-bring against that. It also loses under a tight 5 spm rate limit, normally MPC's
-home ground, because the simple law is already driving into the limit in the
-right direction.
+bring against that.
 
 `preview=True` feeds the **future** of the demand profile into the reference.
 No feedback controller can do that — it is feedforward, optimally weighted — and

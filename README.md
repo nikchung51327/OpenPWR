@@ -1,4 +1,4 @@
-# pwr-two-point-plant
+# OpenPWR
 
 A non-linear pressurised water reactor plant model with a control testbed:
 Li's two-point axial core (point kinetics and iodine/xenon per axial half)
@@ -86,10 +86,11 @@ Read [docs/VALIDATION_AND_CONSTRAINTS.md](docs/VALIDATION_AND_CONSTRAINTS.md)
 ## Layout
 
 ```
-pwr-two-point-plant/
+OpenPWR/
 ├── README.md
 ├── CLAUDE.md                     context for AI coding agents
 ├── LICENSE
+├── CITATION.cff
 ├── pyproject.toml
 ├── requirements.txt
 ├── pwr_plant/
@@ -122,13 +123,16 @@ pwr-two-point-plant/
 - **[V]** Vajpayee, V., Becerra, V., Bausch, N., Deng, J., Shimjith, S. R.,
   Arul, A. J. (2020). Dynamic modelling, simulation, and control design of a
   pressurized water-type nuclear power plant. *Nuclear Engineering and Design*
-  370, 110901. Supplies the plant and every numerical parameter.
+  370, 110901. [doi:10.1016/j.nucengdes.2020.110901](https://doi.org/10.1016/j.nucengdes.2020.110901).
+  Supplies the plant and every numerical parameter.
 - **[L]** Li, G. (2014). Modeling and LQG/LTR control for power and axial power
   difference of load-follow PWR core. *Annals of Nuclear Energy* 68, 193–203.
+  [doi:10.1016/j.anucene.2014.01.022](https://doi.org/10.1016/j.anucene.2014.01.022).
   Supplies the two-point axial core equations.
 - **[K]** Kerlin, T. W., Katz, E. M., Thakkar, J. G., Strange, J. E. (1976).
   Theoretical and experimental dynamic analysis of the H. B. Robinson nuclear
   plant. *Nuclear Technology* 30(3), 299–316.
+  [doi:10.13182/NT76-A31645](https://doi.org/10.13182/NT76-A31645).
 
 ## Licence
 

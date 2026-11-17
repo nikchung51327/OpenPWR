@@ -83,15 +83,16 @@ Four rules these encode, worth keeping whatever you plot:
 
 ## Reference: the gain matrix
 
-The measured step gain of each actuator, which the examples below refer back to.
+The measured step gain of each actuator, which the examples below refer back to:
+the change 300 s after a step of +5 steps/min on a rod group or +0.05 on the valve.
 `QUICKSTART.md` sections 6 and 7 derive these; they are repeated here because
 every pairing argument on this page rests on them.
 
 ```
 input        dPn       dDI     dTavg       dps
-vrod_M   +0.0131   -0.0986    +1.863   +0.0838
-vrod_AO  +0.0264   +0.0854    +1.639   +0.1693
-utg      +0.0292   -0.0107    -0.473   -0.1444
+vrod_M   +0.0131   -0.0986    +1.854   +0.0831
+vrod_AO  +0.0264   +0.0854    +1.622   +0.1680
+utg      +0.0293   -0.0107    -0.469   -0.1441
 ```
 
 - **Both rods raise power; they move `DI` in opposite directions.** That is the
@@ -503,8 +504,7 @@ Four rules that keep a comparison honest:
 
 ## 6. Beyond one loop: feedforward and cascade
 
-Both are possible, and the code for both is below. One of the two wins only on
-one side of the plant, which is the more useful half of this section.
+Both are possible, and the code for both is below.
 
 (MPC is in `QUICKSTART.md` section 17, which builds a thirty-line version and
 measures it. Example 4 above is the two-input constrained case.)
@@ -525,17 +525,31 @@ measures it. Example 4 above is the two-input constrained case.)
 
 Feed-water temperature is measurable and enters through the steam generator, so
 its effect can be cancelled at the valve *before* the shaft responds. A 15 °C
-drop at t = 100 s:
+drop at t = 100 s, on this rig (`FeedwaterDrop` and `GovernorWithFF` are in the
+code at the end of the section):
+
+```python
+def speed_case(gov, t_end=1200.0):
+    """Feed-water drop against whatever `gov` does with the valve."""
+    ctls = [GridDemand(), FeedwaterDrop(), gov, RodsOnTavg(),
+            AxialOffsetBand(), PressurizerHeaterPI()]
+    return ClosedLoop(plant, ctls, demand=lambda t: 1.0,
+                      x0=x0, u0=u0).run(t_end, n_out=1200)
+
+r = speed_case(GovernorWithFF(kff=-0.002))
+```
+
+Peak and IAE are of `w_tur - 60` over the 1200 s run:
 
 | `kff` | peak \|Δω\| (Hz) | IAE speed |
 |---|---|---|
-| 0 (plain governor) | 0.1307 | 8.151 |
-| −0.001 | 0.0835 | 4.800 |
-| **−0.002** | **0.0456** | **2.533** |
-| −0.0025 | 0.0399 | 2.748 |
-| −0.005 | 0.1678 | 10.457 |
+| 0 (plain governor) | 0.1322 | 8.151 |
+| −0.001 | 0.0845 | 4.800 |
+| **−0.002** | **0.0465** | **2.539** |
+| −0.0025 | 0.0403 | 2.768 |
+| −0.005 | 0.1701 | 10.457 |
 
-Peak excursion falls **2.9×**. The gain is **negative**: colder feed-water lowers
+Peak excursion falls **2.8×**. The gain is **negative**: colder feed-water lowers
 steam pressure, hence flow, hence turbine power, so the shaft *decelerates*
 (59.87 Hz at the peak) and the valve must open. Overshoot the gain and the
 feedforward becomes the dominant disturbance — at −0.005 it is already worse than
@@ -547,49 +561,42 @@ gain is never corrected.
 > the disturbance last and the feedforward term is identically zero — the
 > measurement is unchanged to four decimals and nothing warns you.
 
-### Cascade — wins on the reactor side, loses on the secondary
+### Cascade — `Tavg` through power
 
 A cascade helps when the disturbance enters at the **inner** loop and the outer
 variable only sees it later. On this plant that is reactivity: a drift changes
 power in seconds but takes a minute to reach average temperature.
 
 `TavgThroughPower` puts an outer `Tavg` loop around an inner `Pn` loop. Against
-a 0.8 spm reactivity drift:
+a 0.8 spm drift on Mrod from 200 s to 800 s:
 
-| | peak \|ΔTavg\| | peak \|ΔPn\| | end gap | rod travel |
-|---|---|---|---|---|
-| single, deadband 0.55 | 0.6033 °C | 0.00037 | −0.5496 | 8.9 steps |
-| single, deadband 0.0 | 0.0669 °C | 0.00038 | +0.0000 | 5.8 steps |
-| **cascade** | **0.0116 °C** | **0.00019** | +0.0000 | **5.0 steps** |
+```python
+def rx_case(rods, t_end=3600.0):
+    """Reactivity drift against whatever `rods` does to hold the primary."""
+    ctls = [GridDemand(), ValveOnDemand(), ReactivityDrift(), rods,
+            AxialOffsetBand(), PressurizerHeaterPI(), PressurizerLevelPI()]
+    return ClosedLoop(plant, ctls, demand=lambda t: 1.0,
+                      x0=x0, u0=u0).run(t_end, n_out=1500)
+```
 
-The middle row is the fair comparison — against a single loop with its dead band
-removed, the cascade is still **5.8× better on peak temperature error, using 14 %
-less rod travel.** That is a real win.
+| `rods` | peak \|ΔTavg\| | ΔTavg at end | ΔPn at end |
+|---|---|---|---|
+| `RodsOnTavg()`, dead band 0.55 | 0.5842 °C | +0.5507 °C | +0.0033 |
+| `RodsOnTavg(deadband=0.0)` | 0.0709 °C | −0.0006 °C | −0.0024 |
+| **`TavgThroughPower()`** | **0.0209 °C** | −0.0000 °C | −0.0024 |
 
-**Three cascades that do not work**, all measured, because the negative results
-are what tell you when to reach for this:
+ΔTavg is `Tavg` minus its program value. The middle row is the fair comparison:
+against a single loop with its dead band removed, the cascade is still
+**3.4× better on peak temperature error.**
 
-- **Outer `Pn` → inner `Tavg`.** Pointless. At steady state power is set by how
-  much steam the valve passes, not by the rods, so the outer loop has nothing to
-  correct — measured residual power error 5e-5. An early version of this section
-  "showed" it working; it was closing a *temperature* gap only because the inner
-  loop had no dead band, not because the cascade did anything.
-- **Outer speed → inner steam pressure → valve.** Worse than the plain governor:
-  peak 0.382 Hz against 0.131. Steam pressure moves *opposite* to flow, so the
-  inner loop fights the outer.
-- **Outer speed → inner steam flow → valve.** Worse again, 0.586 Hz. The
-  valve-to-flow path is essentially algebraic — `ṁ = Ctg·cv·ps`, the only
-  dynamics being the valve's own second order — so there is no inner lag to
-  tighten and the cascade just adds an integrator and phase lag.
-
-The rule those three illustrate: **a cascade needs genuine dynamics between the
-actuator and the inner measurement.** Where the inner path is fast and clean,
-an inner loop costs you and buys nothing.
+Rod travel does not separate these. All three move the rods 12.5 to 12.9 steps
+over the hour, because the drift tilts the core to the edge of the axial offset
+band (`DI` = −0.030) and `AxialOffsetBand` then works continuously.
 
 ### The code
 
-Both controllers in full. `GovernorWithFF` replaces `TurbineSpeedPI`;
-`TavgThroughPower` replaces `RodsOnTavg`.
+`GovernorWithFF` replaces `TurbineSpeedPI`; `TavgThroughPower` replaces
+`RodsOnTavg`.
 
 ```python
 class GovernorWithFF(Controller):
@@ -644,12 +651,25 @@ class TavgThroughPower(Controller):
         return np.array([e_o + (trim - raw) / self.t_track])
 ```
 
-Only the outer loop declares a state. The inner one does not need an integrator:
-a proportional law on rod **speed** is already integral action on power.
+Only the outer loop of `TavgThroughPower` declares a state. The inner one does
+not need an integrator: a proportional law on rod **speed** is already integral
+action on power.
 
-The disturbance used above is a plain `Controller`, not a special mechanism:
+The two disturbances are plain `Controller`s, not a special mechanism:
 
 ```python
+class FeedwaterDrop(Controller):
+    """-15 degC on T_fw at t = 100 s.  Must run BEFORE any feedforward."""
+    name = "fw_drop"
+
+    def __init__(self, drop=15.0, t_on=100.0):
+        self.drop, self.t_on = drop, t_on
+
+    def update(self, t, sig, xc, u, ctx):
+        u[IU["T_fw"]] = ctx.u0[IU["T_fw"]] - (self.drop if t >= self.t_on else 0.0)
+        return EMPTY
+
+
 class ReactivityDrift(Controller):
     name = "drift"
     def update(self, t, sig, xc, u, ctx):

@@ -1,0 +1,57 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "OpenPWR: a non-linear PWR plant model with a two-point axial core and a control testbed"
+type: software
+authors:
+  - family-names: Chung
+    given-names: Nikolas
+  - family-names: Evripidou
+    given-names: Christos
+  - family-names: Mercangöz
+    given-names: Mehmet
+version: 0.2.0
+date-released: 2026-11-17
+license: MIT
+repository-code: "https://github.com/nikchung51327/OpenPWR"
+abstract: >-
+  A non-linear pressurised water reactor plant model: Li's two-point axial
+  core (point kinetics and iodine/xenon per axial half) in Vajpayee's plant,
+  with a closed-loop control testbed for continuous and sampled controllers.
+keywords:
+  - nuclear engineering
+  - pressurised water reactor
+  - load following
+  - axial offset control
+  - process control
+references:
+  - type: article
+    title: "Dynamic modelling, simulation, and control design of a pressurized water-type nuclear power plant"
+    authors:
+      - family-names: Vajpayee
+        given-names: Vineet
+      - family-names: Becerra
+        given-names: Victor
+      - family-names: Bausch
+        given-names: Nils
+      - family-names: Deng
+        given-names: Jiamei
+      - family-names: Shimjith
+        given-names: S. R.
+      - family-names: Arul
+        given-names: A. John
+    journal: "Nuclear Engineering and Design"
+    volume: 370
+    start: 110901
+    year: 2020
+    doi: 10.1016/j.nucengdes.2020.110901
+  - type: article
+    title: "Modeling and LQG/LTR control for power and axial power difference of load-follow PWR core"
+    authors:
+      - family-names: Li
+        given-names: Gang
+    journal: "Annals of Nuclear Energy"
+    volume: 68
+    start: 193
+    end: 203
+    year: 2014
+    doi: 10.1016/j.anucene.2014.01.022

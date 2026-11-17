@@ -44,7 +44,7 @@ of its end-minus-start change over the 200 s run and compared with the sign of
 the paper's, with a near-zero tolerance (5 % of that variable's largest move)
 where the paper's trace is flat. Peak value, overshoot and settling time are
 **not** scored. Two worked examples of that blindness: eq. 34 as printed rings
-with six direction reversals and still scores 40/40 (§2.4), and the Fig. 11f
+with four direction reversals and still scores 40/40 (§2.4), and the Fig. 11f
 overshoot this model does not reproduce costs no points (§3.2).
 
 | variant | flag | score |
@@ -59,11 +59,11 @@ Magnitudes, not just directions:
 | variable | case | model end | paper end |
 |---|---|---|---|
 | `Pn` | A | 1.018 | 1.018 |
-| `Thot` | A | 329.25 | 329.2 |
-| `Tcold` | A | 298.36 | 298.3 |
-| `Ts` | A | 289.304 | 289.3 |
-| `ps` | A | 7.411 | 7.410 |
-| `_Tf` (core mean) | A / B / C / D | 634.04 / 635.08 / 626.71 / 619.18 | 634.0 / 634.0 / 626.7 / 619.5 |
+| `Thot` | A | 329.24 | 329.2 |
+| `Tcold` | A | 298.35 | 298.3 |
+| `Ts` | A | 289.294 | 289.3 |
+| `ps` | A | 7.410 | 7.410 |
+| `_Tf` (core mean) | A / B / C / D | 633.99 / 635.10 / 626.71 / 619.17 | 634.0 / 635.0 / 626.7 / 619.5 |
 | `P_tur` | all four | exact | — |
 
 Fuel temperature needs one note. [V] has a single fuel node; the two-point core
@@ -172,8 +172,8 @@ identical in structure — both print `(O_rv·tau_hp + tau_ip)/(...)`.
 
 | form | ζ | behaviour |
 |---|---|---|
-| eq. 34 as printed | 0.3162 | underdamped, 21 s ringing |
-| with `tau_hp`, as eqs. 35/36 | 1.7322 | overdamped, smooth |
+| eq. 34 as printed | 0.3500 | underdamped, 13 s ringing |
+| with `tau_hp`, as eqs. 35/36 | 2.6000 | overdamped, smooth |
 
 With `tau_hp` the quadratic factors **exactly** into
 `(s + 1/tau_hp)(s + 1/tau_ip)` — residual 0.00e+00. The corrected equation is two
@@ -182,9 +182,9 @@ physically is, and which cannot ring. The printed form's complex pole pair
 corresponds to no mechanism in the plant.
 
 Three further arguments: his Fig. 11f shows no ringing; a reversal count across
-all 13 validated panels isolates the ringing to `P_tur` alone (case B shows 6
+all 13 validated panels isolates the ringing to `P_tur` alone (case B shows 4
 direction reversals where every thermal and pressure panel settles
-monotonically), and the flag takes that 6 to 0 while touching nothing else.
+monotonically), and the flag takes that 4 to 0 while touching nothing else.
 
 **`HP_TAU = True` is the default.** `--no-hp-tau` restores the print. Not a
 solver artefact: `rtol` 1e-7 → 1e-11, `atol` 1e-9 → 1e-14, and LSODA / BDF /
@@ -202,8 +202,9 @@ constants only close if its power terms are in **watts**:
 
 The ratio is exactly `Pth0 = 3.233e9`, identifying a units mismatch rather than
 a modelling choice. The model therefore scales eq. 38 by `eq38_power_base`,
-which defaults to `Pth0`. With it, an ungoverned 10 % load rejection reaches
-108.6 Hz and `TurbineSpeedPI` holds the peak to 60.13 Hz.
+which defaults to `Pth0`. With it, an ungoverned 10 % step load rejection
+never settles (111 Hz after ten minutes and still accelerating) and
+`TurbineSpeedPI` holds the peak to 60.85 Hz.
 `Params(eq38_power_base=1.0)` feeds per-unit power instead: the same rejection
 then moves speed 9.4e-8 Hz in 50 minutes and the speed loop has nothing to act
 on.
@@ -218,7 +219,7 @@ reactor-leading, and the only visible tell is `utg` never moving.
 **Eq. 62's gains do not transfer**, for an unrelated reason. `KP = 643`
 implies 0.16 % governor droop where real machines run 4–5 %; at that gain a
 0.13 Hz error commands 80 units of valve travel against a range of 0–1.5, the
-valve slams shut and the set undershoots to 57.7 Hz. Shipped defaults are
+valve slams shut and the set undershoots. Shipped defaults are
 droop-based, `KP = 0.333` per Hz.
 
 ### 2.6 Panel (h) — three channels match, one is not comparable
@@ -248,12 +249,12 @@ differ in where Mrod *starts*:
 
 | configuration | `rod_map` | Mrod `dPn / dDI` | AOrod `dPn / dDI` |
 |---|---|---|---|
-| **[L] Case 2** (MIMO, eq. 12) — the default | `[[1,0],[0,1]]` | +2.22e-3 / −2.21e-2 | +5.07e-3 / +1.92e-2 |
-| **[L] Case 1** (SISO, eq. 11) | `[[0,0],[1,1]]` | +5.07e-3 / +1.92e-2 | identical |
+| **[L] Case 2** (MIMO, eq. 12) — the default | `[[1,0],[0,1]]` | +2.20e-3 / −2.21e-2 | +5.04e-3 / +1.93e-2 |
+| **[L] Case 1** (SISO, eq. 11) | `[[0,0],[1,1]]` | +5.04e-3 / +1.93e-2 | identical |
 
 **Case 1 is not Case 2 with AOrod frozen.** Freezing AOrod in Case 2 leaves Mrod
 on the bottom half (`dDI = −0.082` for a 20-step move); Case 1 has it on the top
-(`dDI = +0.072`). Opposite halves, opposite sign — a different matrix, not a
+(`dDI = +0.071`). Opposite halves, opposite sign — a different matrix, not a
 different command. Verified numerically, not assumed.
 
 **The signs in the axial-offset controllers are tied to this map.**
@@ -515,7 +516,7 @@ functions were computed for a plant this model does not represent.
 - **The pressurizer level loop is mandatory** under aggressive control (2.2).
 - **Linear validity** is about a 12 % step for 5 % error in `Pn`. Beyond that,
   schedule.
-- **`cond(A) ≈ 1e25`.** If you integrate the linear model yourself, pass the
+- **`cond(A) ≈ 4e25`.** If you integrate the linear model yourself, pass the
   Jacobian explicitly; an implicit solver finite-differencing it produces
   non-finite values.
 - **The `rod_map` is constant**, so it encodes one fixed assumption about where

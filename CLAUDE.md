@@ -120,7 +120,7 @@ described a specific reactor.
 
 - Linearity holds to about a **12 % step** for 5 % error in `Pn`. Beyond that,
   use a schedule.
-- `cond(A) ≈ 1e25`. If you integrate the linear model yourself, **pass the
+- `cond(A) ≈ 4e25`. If you integrate the linear model yourself, **pass the
   Jacobian explicitly**; an implicit solver finite-differencing it returns
   non-finite values.
 - `rod_map` is **constant**, so it encodes one fixed assumption about where

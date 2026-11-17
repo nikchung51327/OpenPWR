@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Smoke test: does the restructured repo still work?
+"""Smoke test: does the repo work as laid out?
 
 Not a validation — `validation/validate_vajpayee.py` is that, and it takes
-seconds per case. This answers a narrower question: after moving files around,
-does the package import, build, trim and integrate, and did anything get left
-pointing at the old layout?
+seconds per case. This answers a narrower question: does the package import,
+build, trim and integrate, and does every path point at the current layout?
 
 Run from anywhere:
 
@@ -84,7 +83,7 @@ def _no_stale_refs():
 
 
 # ---------------------------------------------------------------------------
-# 2.  The package API the restructure promised
+# 2.  The package API
 # ---------------------------------------------------------------------------
 @check("import: `from pwr_plant import *` exposes the public names")
 def _flat_import():
@@ -166,9 +165,8 @@ def _free_params():
 def _rod_signs():
     """Mrod drives the bottom half and lowers DI; AOrod the top and raises it.
 
-    This is checked because the default `rod_map` was the transpose until
-    2026-10-11, and nothing about a wrong map raises an error — the loops just
-    quietly drive the wrong way.
+    This is checked because nothing about a wrong `rod_map` raises an error:
+    the loops just quietly drive the wrong way.
     """
     from pwr_plant import Plant, ClosedLoop, Manual, trim
     plant = Plant()
@@ -216,8 +214,8 @@ def _closed_loop():
 def _validation_runs():
     """Run it as a subprocess, the way a person actually invokes it.
 
-    This is deliberately not an `import` with sys.path pre-patched — that is
-    what the first version of this test did, and it masked a real bug.
+    This is deliberately not an `import` with sys.path pre-patched, which
+    would hide the failure this check exists to catch.
     `python validation/validate_vajpayee.py` puts *validation/* on sys.path,
     not the repo root, so the script cannot see `pwr_plant` from EITHER
     directory unless it inserts the root itself.
